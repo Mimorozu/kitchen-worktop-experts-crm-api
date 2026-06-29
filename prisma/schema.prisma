@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// points to database
+datasource db {
+  provider = "postgresql"
+}
+
+
+model Lead {
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Customer contact info
+  name        String
+  email       String
+  phone       String
+  postcode    String
+
+  // Job details
+  size        String?    // "Small", "Medium", "Large"
+  material    String?   // "Quartz", "Granite", "Porcelain"
+  quartzStyle String?
+  budget      String?
+  timeline    String?
+  photoUrl    String?
+
+  // CRM fields (you fill these in)
+  status      String   @default("New") // every new lead automatically starts at "New" in pipeline to avoid manually setting it
+  notes       String?
+
+  // Which user (staff member) owns this lead
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  leads     Lead[]
+}
