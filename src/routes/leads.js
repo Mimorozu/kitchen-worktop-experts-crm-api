@@ -1,18 +1,12 @@
-// Handles all incoming requests that start with /api/leads and decides what to do with them.
-// GET, POST, PUT, DELETE
-
-
 const { Router } = require('express')
 const prisma = require('../prisma')
 const auth = require('../middleware/auth')
+const apiKey = require('../middleware/apiKey')
 
 const router = Router()
 
-// All /api/leads routes require a valid JWT
-router.use(auth)
-
-// GET /api/leads — return all leads, newest first
-router.get('/', async (req, res) => {
+// GET all leads — JWT protected
+router.get('/', auth, async (req, res) => {
   try {
     const leads = await prisma.lead.findMany({ orderBy: { createdAt: 'desc' } })
     res.json(leads)
@@ -21,8 +15,8 @@ router.get('/', async (req, res) => {
   }
 })
 
-// GET /api/leads/:id — return a single lead
-router.get('/:id', async (req, res) => {
+// GET single lead — JWT protected
+router.get('/:id', auth, async (req, res) => {
   try {
     const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
@@ -32,8 +26,8 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// POST /api/leads — create a new lead
-router.post('/', async (req, res) => {
+// POST — API key protected (website form uses this)
+router.post('/', apiKey, async (req, res) => {
   try {
     const {
       name, email, phone, postcode,
@@ -42,21 +36,23 @@ router.post('/', async (req, res) => {
       status, notes
     } = req.body
 
-    if (!name || !email || !phone || !postcode || !size || !material) {
-      return res.status(400).json({ error: 'name, email, phone, postcode, size and material are required' })
+    if (!name || !email || !postcode || !size || !material) {
+      return res.status(400).json({ error: 'name, email, postcode, size and material are required' })
     }
 
     const lead = await prisma.lead.create({
       data: {
-        name, email, phone, postcode,
-        size, material,
+        name, email,
+        phone:    phone    || 'Not provided',
+        postcode, size, material,
         ...(quartzStyle && { quartzStyle }),
         ...(budget      && { budget }),
         ...(timeline    && { timeline }),
         ...(photoUrl    && { photoUrl }),
         ...(status      && { status }),
         ...(notes       && { notes }),
-        userId: req.user.userId
+        source: 'Website',
+        userId: 1
       }
     })
 
@@ -66,8 +62,8 @@ router.post('/', async (req, res) => {
   }
 })
 
-// PUT /api/leads/:id — update a lead
-router.put('/:id', async (req, res) => {
+// PUT — JWT protected
+router.put('/:id', auth, async (req, res) => {
   try {
     const {
       name, email, phone, postcode,
@@ -101,8 +97,8 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// DELETE /api/leads/:id — delete a lead
-router.delete('/:id', async (req, res) => {
+// DELETE — JWT protected
+router.delete('/:id', auth, async (req, res) => {
   try {
     await prisma.lead.delete({ where: { id: Number(req.params.id) } })
     res.status(204).send()
