@@ -14,23 +14,40 @@ model Lead {
   updatedAt   DateTime @updatedAt
 
   // Customer contact info
-  name        String
-  email       String
-  phone       String
-  postcode    String
+  name         String
+  email        String
+  phone        String
+  addressLine1 String?
+  addressLine2 String?
+  postcode     String
 
   // Job details
-  size        String?    // "Small", "Medium", "Large"
-  material    String?   // "Quartz", "Granite", "Porcelain"
-  quartzStyle String?
-  budget      String?
-  timeline    String?
-  photoUrl    String?
+  size            String?    // "Small", "Medium", "Large"
+  material        String?   // "Quartz", "Granite", "Porcelain"
+  quartzStyle     String?
+  kitchenColour   String?
+  kitchenStyle    String?
+  floorColour     String?
+  handleColour    String?
+  wallColour      String?
+  specialFeatures String?
+  selectedMaterial String?
+  budget          String?
+  timeline        String?
+  photoUrl        String?
+
+  // Dates
+  templateDate        DateTime?
+  installDate          DateTime?
+  kitchenInstallDate  DateTime?
+  warehouseVisitDate  DateTime?
+  followUpDate        DateTime?
 
   // CRM fields (you fill these in)
   status      String   @default("New")
   source      String?
   notes       String?
+  quoteValue  Float?
 
   // Which user (staff member) owns this lead
   userId      Int

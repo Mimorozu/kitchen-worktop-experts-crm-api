@@ -26,35 +26,44 @@ router.get('/:id', auth, async (req, res) => {
   }
 })
 
+// Fields the CRM UI can edit, beyond the required core ones
+const OPTIONAL_STRING_FIELDS = [
+  'addressLine1', 'addressLine2',
+  'quartzStyle', 'kitchenColour', 'kitchenStyle', 'floorColour',
+  'handleColour', 'wallColour', 'specialFeatures', 'selectedMaterial',
+  'budget', 'timeline', 'photoUrl', 'status', 'source', 'notes'
+]
+const DATE_FIELDS = [
+  'templateDate', 'installDate', 'kitchenInstallDate',
+  'warehouseVisitDate', 'followUpDate'
+]
+
 // POST — API key protected (website form uses this) — redeploy trigger
 router.post('/', apiKey, async (req, res) => {
   try {
-    const {
-      name, email, phone, postcode,
-      size, material, quartzStyle,
-      budget, timeline, photoUrl,
-      status, notes
-    } = req.body
+    const { name, email, phone, postcode, size, material, quoteValue } = req.body
 
     if (!name || !email || !postcode || !size || !material) {
       return res.status(400).json({ error: 'name, email, postcode, size and material are required' })
     }
 
-    const lead = await prisma.lead.create({
-      data: {
-        name, email,
-        phone:    phone    || 'Not provided',
-        postcode, size, material,
-        ...(quartzStyle && { quartzStyle }),
-        ...(budget      && { budget }),
-        ...(timeline    && { timeline }),
-        ...(photoUrl    && { photoUrl }),
-        ...(status      && { status }),
-        ...(notes       && { notes }),
-        source: 'Website',
-        userId: 1
-      }
-    })
+    const data = {
+      name, email,
+      phone: phone || 'Not provided',
+      postcode, size, material,
+      source: 'Website',
+      userId: 1
+    }
+
+    for (const field of OPTIONAL_STRING_FIELDS) {
+      if (req.body[field]) data[field] = req.body[field]
+    }
+    for (const field of DATE_FIELDS) {
+      if (req.body[field]) data[field] = new Date(req.body[field])
+    }
+    if (quoteValue !== undefined && quoteValue !== '') data.quoteValue = parseFloat(quoteValue)
+
+    const lead = await prisma.lead.create({ data })
 
     res.status(201).json(lead)
   } catch (error) {
@@ -65,29 +74,28 @@ router.post('/', apiKey, async (req, res) => {
 // PUT — JWT protected
 router.put('/:id', auth, async (req, res) => {
   try {
-    const {
-      name, email, phone, postcode,
-      size, material, quartzStyle,
-      budget, timeline, photoUrl,
-      status, notes
-    } = req.body
+    const { name, email, phone, postcode, size, material, quoteValue } = req.body
+
+    const data = {
+      ...(name     && { name }),
+      ...(email    && { email }),
+      ...(phone    && { phone }),
+      ...(postcode && { postcode }),
+      ...(size     && { size }),
+      ...(material && { material })
+    }
+
+    for (const field of OPTIONAL_STRING_FIELDS) {
+      if (req.body[field]) data[field] = req.body[field]
+    }
+    for (const field of DATE_FIELDS) {
+      if (req.body[field]) data[field] = new Date(req.body[field])
+    }
+    if (quoteValue !== undefined && quoteValue !== '') data.quoteValue = parseFloat(quoteValue)
 
     const lead = await prisma.lead.update({
       where: { id: Number(req.params.id) },
-      data: {
-        ...(name        && { name }),
-        ...(email       && { email }),
-        ...(phone       && { phone }),
-        ...(postcode    && { postcode }),
-        ...(size        && { size }),
-        ...(material    && { material }),
-        ...(quartzStyle && { quartzStyle }),
-        ...(budget      && { budget }),
-        ...(timeline    && { timeline }),
-        ...(photoUrl    && { photoUrl }),
-        ...(status      && { status }),
-        ...(notes       && { notes })
-      }
+      data
     })
 
     res.json(lead)

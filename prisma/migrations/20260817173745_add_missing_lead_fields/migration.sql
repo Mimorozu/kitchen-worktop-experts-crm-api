@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "Lead" ADD COLUMN     "addressLine1" TEXT,
+ADD COLUMN     "addressLine2" TEXT,
+ADD COLUMN     "floorColour" TEXT,
+ADD COLUMN     "followUpDate" TIMESTAMP(3),
+ADD COLUMN     "handleColour" TEXT,
+ADD COLUMN     "installDate" TIMESTAMP(3),
+ADD COLUMN     "kitchenColour" TEXT,
+ADD COLUMN     "kitchenInstallDate" TIMESTAMP(3),
+ADD COLUMN     "kitchenStyle" TEXT,
+ADD COLUMN     "quoteValue" DOUBLE PRECISION,
+ADD COLUMN     "selectedMaterial" TEXT,
+ADD COLUMN     "specialFeatures" TEXT,
+ADD COLUMN     "templateDate" TIMESTAMP(3),
+ADD COLUMN     "wallColour" TEXT,
+ADD COLUMN     "warehouseVisitDate" TIMESTAMP(3);
