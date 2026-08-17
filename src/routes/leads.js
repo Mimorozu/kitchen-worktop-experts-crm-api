@@ -1,7 +1,7 @@
 const { Router } = require('express')
 const prisma = require('../prisma')
 const auth = require('../middleware/auth')
-const apiKey = require('../middleware/apiKey')
+const authOrApiKey = require('../middleware/authOrApiKey')
 
 const router = Router()
 
@@ -38,8 +38,8 @@ const DATE_FIELDS = [
   'warehouseVisitDate', 'followUpDate'
 ]
 
-// POST — API key protected (website form uses this) — redeploy trigger
-router.post('/', apiKey, async (req, res) => {
+// POST — API key (website form) or JWT (CRM staff creating a lead)
+router.post('/', authOrApiKey, async (req, res) => {
   try {
     const { name, email, phone, postcode, size, material, quoteValue } = req.body
 
