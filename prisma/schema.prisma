@@ -54,6 +54,17 @@ model Lead {
   user        User     @relation(fields: [userId], references: [id])
 
   photos      Photo[]
+  activityLog ActivityLog[]
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  type      String   @default("note")
+  message   String
+
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 }
 
 model Photo {

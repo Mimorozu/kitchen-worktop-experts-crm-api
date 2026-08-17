@@ -31,7 +31,10 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const lead = await prisma.lead.findUnique({
       where: { id: Number(req.params.id) },
-      include: { photos: { orderBy: { createdAt: 'asc' } } }
+      include: {
+        photos: { orderBy: { createdAt: 'asc' } },
+        activityLog: { orderBy: { createdAt: 'asc' } }
+      }
     })
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
     res.json(lead)
@@ -175,6 +178,27 @@ router.delete('/:id/photos/:photoId', auth, async (req, res) => {
     res.status(204).send()
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete photo' })
+  }
+})
+
+// POST activity note — JWT protected
+router.post('/:id/activity', auth, async (req, res) => {
+  try {
+    const { message } = req.body
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'message is required' })
+    }
+
+    const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
+    if (!lead) return res.status(404).json({ error: 'Lead not found' })
+
+    const entry = await prisma.activityLog.create({
+      data: { message: message.trim(), leadId: lead.id }
+    })
+
+    res.status(201).json(entry)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add activity' })
   }
 })
 
