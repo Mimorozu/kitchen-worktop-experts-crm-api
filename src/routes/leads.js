@@ -22,6 +22,7 @@ router.get('/', auth, async (req, res) => {
     const leads = await prisma.lead.findMany({ orderBy: { createdAt: 'desc' } })
     res.json(leads)
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to fetch leads' })
   }
 })
@@ -39,6 +40,7 @@ router.get('/:id', auth, async (req, res) => {
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
     res.json(lead)
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to fetch lead' })
   }
 })
@@ -84,6 +86,7 @@ router.post('/', authOrApiKey, async (req, res) => {
 
     res.status(201).json(lead)
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to create lead' })
   }
 })
@@ -117,6 +120,7 @@ router.put('/:id', auth, async (req, res) => {
 
     res.json(lead)
   } catch (error) {
+    console.error(error)
     if (error.code === 'P2025') return res.status(404).json({ error: 'Lead not found' })
     res.status(500).json({ error: 'Failed to update lead' })
   }
@@ -128,6 +132,7 @@ router.delete('/:id', auth, async (req, res) => {
     await prisma.lead.delete({ where: { id: Number(req.params.id) } })
     res.status(204).send()
   } catch (error) {
+    console.error(error)
     if (error.code === 'P2025') return res.status(404).json({ error: 'Lead not found' })
     res.status(500).json({ error: 'Failed to delete lead' })
   }
@@ -160,6 +165,7 @@ router.post('/:id/photos', auth, upload.single('photo'), async (req, res) => {
 
     res.status(201).json(photo)
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to upload photo' })
   }
 })
@@ -177,6 +183,7 @@ router.delete('/:id/photos/:photoId', auth, async (req, res) => {
 
     res.status(204).send()
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to delete photo' })
   }
 })
@@ -198,6 +205,7 @@ router.post('/:id/activity', auth, async (req, res) => {
 
     res.status(201).json(entry)
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Failed to add activity' })
   }
 })
