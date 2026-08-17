@@ -52,6 +52,20 @@ model Lead {
   // Which user (staff member) owns this lead
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
+
+  photos      Photo[]
+}
+
+model Photo {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  filename     String
+  url          String
+  publicId     String   // Cloudinary public_id, needed to delete the asset later
+  resourceType String   // Cloudinary resource_type ("image" or "raw") — destroy() needs the resolved type, not "auto"
+
+  leadId     Int
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 }
 
 model User {

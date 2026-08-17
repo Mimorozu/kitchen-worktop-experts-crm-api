@@ -1,9 +1,20 @@
 const { Router } = require('express')
+const multer = require('multer')
 const prisma = require('../prisma')
+const cloudinary = require('../cloudinary')
 const auth = require('../middleware/auth')
 const authOrApiKey = require('../middleware/authOrApiKey')
 
 const router = Router()
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    cb(null, allowed.includes(file.mimetype))
+  }
+})
 
 // GET all leads — JWT protected
 router.get('/', auth, async (req, res) => {
@@ -18,7 +29,10 @@ router.get('/', auth, async (req, res) => {
 // GET single lead — JWT protected
 router.get('/:id', auth, async (req, res) => {
   try {
-    const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
+    const lead = await prisma.lead.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { photos: { orderBy: { createdAt: 'asc' } } }
+    })
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
     res.json(lead)
   } catch (error) {
@@ -113,6 +127,54 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (error) {
     if (error.code === 'P2025') return res.status(404).json({ error: 'Lead not found' })
     res.status(500).json({ error: 'Failed to delete lead' })
+  }
+})
+
+// POST photo — JWT protected. Uploads to Cloudinary, stores the reference.
+router.post('/:id/photos', auth, upload.single('photo'), async (req, res) => {
+  try {
+    const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
+    if (!lead) return res.status(404).json({ error: 'Lead not found' })
+    if (!req.file) return res.status(400).json({ error: 'No valid file uploaded' })
+
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: `kwe-crm/leads/${lead.id}`, resource_type: 'auto' },
+        (error, result) => (error ? reject(error) : resolve(result))
+      )
+      stream.end(req.file.buffer)
+    })
+
+    const photo = await prisma.photo.create({
+      data: {
+        filename: req.file.originalname,
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        resourceType: uploadResult.resource_type,
+        leadId: lead.id
+      }
+    })
+
+    res.status(201).json(photo)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upload photo' })
+  }
+})
+
+// DELETE photo — JWT protected
+router.delete('/:id/photos/:photoId', auth, async (req, res) => {
+  try {
+    const photo = await prisma.photo.findUnique({ where: { id: Number(req.params.photoId) } })
+    if (!photo || photo.leadId !== Number(req.params.id)) {
+      return res.status(404).json({ error: 'Photo not found' })
+    }
+
+    await cloudinary.uploader.destroy(photo.publicId, { resource_type: photo.resourceType })
+    await prisma.photo.delete({ where: { id: photo.id } })
+
+    res.status(204).send()
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete photo' })
   }
 })
 
