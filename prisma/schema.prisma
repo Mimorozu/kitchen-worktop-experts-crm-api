@@ -28,7 +28,8 @@ model Lead {
   photoUrl    String?
 
   // CRM fields (you fill these in)
-  status      String   @default("New") // every new lead automatically starts at "New" in pipeline to avoid manually setting it
+  status      String   @default("New")
+  source      String?
   notes       String?
 
   // Which user (staff member) owns this lead
