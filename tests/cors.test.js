@@ -49,3 +49,29 @@ test('requests with no origin still succeed (tools, server-to-server)', async ()
     assert.equal(res.status, 200)
   })
 })
+
+test('public website origins are allowed', async () => {
+  await withServer(async (base) => {
+    for (const origin of ['https://www.kitchenworktopexperts.co.uk', 'https://kitchenworktopexperts.co.uk']) {
+      const res = await fetch(`${base}/ping`, { headers: { Origin: origin } })
+      assert.equal(res.headers.get('access-control-allow-origin'), origin)
+    }
+  })
+})
+
+test('preflight allows the content-type, x-api-key and authorization headers', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/ping`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: FRONTEND,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type,x-api-key,authorization'
+      }
+    })
+    const allowed = (res.headers.get('access-control-allow-headers') || '').toLowerCase()
+    assert.ok(allowed.includes('content-type'), allowed)
+    assert.ok(allowed.includes('x-api-key'), allowed)
+    assert.ok(allowed.includes('authorization'), allowed)
+  })
+})

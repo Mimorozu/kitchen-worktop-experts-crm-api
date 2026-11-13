@@ -5,11 +5,19 @@
 
 const cors = require('cors')
 
+// Public website domains that also call the CRM API from a browser
+const PUBLIC_SITE_ORIGINS = [
+  'https://kitchenworktopexperts.co.uk',
+  'https://www.kitchenworktopexperts.co.uk'
+]
+
 const allowedOrigins = process.env.FRONTEND_URL
-  ? [process.env.FRONTEND_URL]
+  ? [process.env.FRONTEND_URL, ...PUBLIC_SITE_ORIGINS]
   : ['http://localhost:5173', 'http://localhost:5174']
 
 const corsOptions = {
+  // Preflight answers list these headers. Authorization carries the login token, so it must be allowed too.
+  allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'],
   origin: (origin, callback) => {
     // No Origin header: not a browser cross-site request, so there is nothing to allow or block
     if (!origin) return callback(null, true)
