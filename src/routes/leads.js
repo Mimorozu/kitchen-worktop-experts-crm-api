@@ -4,6 +4,7 @@ const prisma = require('../prisma')
 const auth = require('../middleware/auth')
 const authOrApiKey = require('../middleware/authOrApiKey')
 const photos = require('../photos')
+const { notifyNewLead } = require('../whatsapp')
 const { validateLead, validateActivityMessage, parseId } = require('../validation')
 
 const router = Router()
@@ -64,6 +65,8 @@ router.post('/', authOrApiKey, async (req, res) => {
     }
 
     const lead = await prisma.lead.create({ data })
+    // Alert is sent in the background; a WhatsApp failure must not affect the saved lead
+    notifyNewLead(lead)
     res.status(201).json(lead)
   } catch (error) {
     console.error(error)
