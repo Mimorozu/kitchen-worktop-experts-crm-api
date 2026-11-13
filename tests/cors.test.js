@@ -58,3 +58,20 @@ test('public website origins are allowed', async () => {
     }
   })
 })
+
+test('preflight allows the content-type, x-api-key and authorization headers', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/ping`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: FRONTEND,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type,x-api-key,authorization'
+      }
+    })
+    const allowed = (res.headers.get('access-control-allow-headers') || '').toLowerCase()
+    assert.ok(allowed.includes('content-type'), allowed)
+    assert.ok(allowed.includes('x-api-key'), allowed)
+    assert.ok(allowed.includes('authorization'), allowed)
+  })
+})
