@@ -49,3 +49,12 @@ test('requests with no origin still succeed (tools, server-to-server)', async ()
     assert.equal(res.status, 200)
   })
 })
+
+test('public website origins are allowed', async () => {
+  await withServer(async (base) => {
+    for (const origin of ['https://www.kitchenworktopexperts.co.uk', 'https://kitchenworktopexperts.co.uk']) {
+      const res = await fetch(`${base}/ping`, { headers: { Origin: origin } })
+      assert.equal(res.headers.get('access-control-allow-origin'), origin)
+    }
+  })
+})
