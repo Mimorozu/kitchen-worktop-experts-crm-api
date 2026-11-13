@@ -49,9 +49,9 @@ model Lead {
   notes       String?
   quoteValue  Float?
 
-  // Which user (staff member) owns this lead
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
+  // Staff member who created the lead; null for website leads. Any signed-in staff can view and edit every lead.
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id])
 
   photos      Photo[]
   activityLog ActivityLog[]
@@ -74,6 +74,8 @@ model Photo {
   url          String
   publicId     String   // Cloudinary public_id, needed to delete the asset later
   resourceType String   // Cloudinary resource_type ("image" or "raw") — destroy() needs the resolved type, not "auto"
+  delivery     String   @default("upload") // "upload" = legacy public URL; "authenticated" = private, signed URLs only
+  format       String?  // file type detected from the contents ("jpg", "png", "webp", "pdf")
 
   leadId     Int
   lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -85,4 +87,21 @@ model User {
   password  String
   createdAt DateTime @default(now())
   leads     Lead[]
+
+  // Auth hardening
+  emailVerified   Boolean   @default(false)
+  verifyTokenHash String?
+  verifyExpiresAt DateTime?
+  resetTokenHash  String?
+  resetExpiresAt  DateTime?
+  failedLogins    Int       @default(0)
+  lockedUntil     DateTime?
+  tokenVersion    Int       @default(0) // bumped on password reset; older JWTs stop working
+}
+
+// Single-row table: id is always 1. Holds the quote pricing settings as JSON.
+model Pricing {
+  id        Int      @id @default(1)
+  data      Json
+  updatedAt DateTime @updatedAt
 }
