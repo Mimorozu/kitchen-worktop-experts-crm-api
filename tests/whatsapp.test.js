@@ -3,7 +3,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { sendLeadAlert, clean } = require('../src/whatsapp')
 
-const LEAD = { id: 7, name: 'Sarah Whitfield', postcode: 'SW1A 1AA', material: 'Quartz' }
+const LEAD = { id: 7, name: 'Sarah Whitfield', phone: '07700 900123', postcode: 'SW1A 1AA', material: 'Quartz' }
 
 const setConfig = (on) => {
   if (on) {
@@ -39,7 +39,7 @@ test('with configuration: posts a template message to the Cloud API', async () =
   assert.equal(body.template.name, 'new_lead_alert')
   assert.deepEqual(
     body.template.components[0].parameters.map((p) => p.text),
-    ['Sarah Whitfield', 'SW1A 1AA', 'Quartz']
+    ['Sarah Whitfield', '07700 900123', 'SW1A 1AA', 'Quartz']
   )
 })
 

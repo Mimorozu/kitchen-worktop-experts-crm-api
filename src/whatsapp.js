@@ -32,6 +32,7 @@ const sendLeadAlert = async (lead) => {
         type: 'body',
         parameters: [
           { type: 'text', text: clean(lead.name) },
+          { type: 'text', text: clean(lead.phone) },
           { type: 'text', text: clean(lead.postcode) },
           { type: 'text', text: clean(lead.material) }
         ]
