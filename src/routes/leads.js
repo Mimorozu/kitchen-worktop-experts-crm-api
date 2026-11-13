@@ -1,12 +1,14 @@
 const { Router } = require('express')
 const multer = require('multer')
 const prisma = require('../prisma')
-const cloudinary = require('../cloudinary')
 const auth = require('../middleware/auth')
 const authOrApiKey = require('../middleware/authOrApiKey')
+const photos = require('../photos')
+const { validateLead, validateActivityMessage, parseId } = require('../validation')
 
 const router = Router()
 
+// Cheap first filter on the claimed type. The real check is the file contents, in photos.detectFileType.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -30,60 +32,38 @@ router.get('/', auth, async (req, res) => {
 // GET single lead — JWT protected
 router.get('/:id', auth, async (req, res) => {
   try {
+    const id = parseId(req.params.id)
+    if (!id) return res.status(404).json({ error: 'Lead not found' })
     const lead = await prisma.lead.findUnique({
-      where: { id: Number(req.params.id) },
+      where: { id },
       include: {
         photos: { orderBy: { createdAt: 'asc' } },
         activityLog: { orderBy: { createdAt: 'asc' } }
       }
     })
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
-    res.json(lead)
+    res.json(photos.presentLead(lead))
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Failed to fetch lead' })
   }
 })
 
-// Fields the CRM UI can edit, beyond the required core ones
-const OPTIONAL_STRING_FIELDS = [
-  'addressLine1', 'addressLine2',
-  'quartzStyle', 'kitchenColour', 'kitchenStyle', 'floorColour',
-  'handleColour', 'wallColour', 'specialFeatures', 'selectedMaterial',
-  'budget', 'timeline', 'photoUrl', 'status', 'source', 'notes'
-]
-const DATE_FIELDS = [
-  'templateDate', 'installDate', 'kitchenInstallDate',
-  'warehouseVisitDate', 'followUpDate'
-]
-
 // POST — API key (website form) or JWT (CRM staff creating a lead)
 router.post('/', authOrApiKey, async (req, res) => {
   try {
-    const { name, email, phone, postcode, size, material, quoteValue } = req.body
-
-    if (!name || !email || !postcode || !size || !material) {
-      return res.status(400).json({ error: 'name, email, postcode, size and material are required' })
-    }
+    const checked = validateLead(req.body, { creating: true })
+    if (checked.error) return res.status(400).json({ error: checked.error })
 
     const data = {
-      name, email,
-      phone: phone || 'Not provided',
-      postcode, size, material,
+      phone: 'Not provided',
       source: 'Website',
-      userId: 1
+      ...checked.value,
+      // Staff creating a lead via JWT are recorded as creator; website (API key) leads have none
+      userId: req.user ? req.user.id : null
     }
-
-    for (const field of OPTIONAL_STRING_FIELDS) {
-      if (req.body[field]) data[field] = req.body[field]
-    }
-    for (const field of DATE_FIELDS) {
-      if (req.body[field]) data[field] = new Date(req.body[field])
-    }
-    if (quoteValue !== undefined && quoteValue !== '') data.quoteValue = parseFloat(quoteValue)
 
     const lead = await prisma.lead.create({ data })
-
     res.status(201).json(lead)
   } catch (error) {
     console.error(error)
@@ -91,33 +71,19 @@ router.post('/', authOrApiKey, async (req, res) => {
   }
 })
 
-// PUT — JWT protected
+// PUT — JWT protected. Only the fields in the request are changed; the creator never changes.
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { name, email, phone, postcode, size, material, quoteValue } = req.body
+    const id = parseId(req.params.id)
+    if (!id) return res.status(404).json({ error: 'Lead not found' })
 
-    const data = {
-      ...(name     && { name }),
-      ...(email    && { email }),
-      ...(phone    && { phone }),
-      ...(postcode && { postcode }),
-      ...(size     && { size }),
-      ...(material && { material })
-    }
+    const existing = await prisma.lead.findUnique({ where: { id } })
+    if (!existing) return res.status(404).json({ error: 'Lead not found' })
 
-    for (const field of OPTIONAL_STRING_FIELDS) {
-      if (req.body[field]) data[field] = req.body[field]
-    }
-    for (const field of DATE_FIELDS) {
-      if (req.body[field]) data[field] = new Date(req.body[field])
-    }
-    if (quoteValue !== undefined && quoteValue !== '') data.quoteValue = parseFloat(quoteValue)
+    const checked = validateLead(req.body, { existing })
+    if (checked.error) return res.status(400).json({ error: checked.error })
 
-    const lead = await prisma.lead.update({
-      where: { id: Number(req.params.id) },
-      data
-    })
-
+    const lead = await prisma.lead.update({ where: { id }, data: checked.value })
     res.json(lead)
   } catch (error) {
     console.error(error)
@@ -129,7 +95,16 @@ router.put('/:id', auth, async (req, res) => {
 // DELETE — JWT protected
 router.delete('/:id', auth, async (req, res) => {
   try {
-    await prisma.lead.delete({ where: { id: Number(req.params.id) } })
+    const id = parseId(req.params.id)
+    if (!id) return res.status(404).json({ error: 'Lead not found' })
+
+    const lead = await prisma.lead.findUnique({ where: { id }, include: { photos: true } })
+    if (!lead) return res.status(404).json({ error: 'Lead not found' })
+
+    // Photo and activity rows cascade in the database; then remove the files
+    await prisma.lead.delete({ where: { id } })
+    await photos.removeFiles(lead.photos)
+
     res.status(204).send()
   } catch (error) {
     console.error(error)
@@ -138,32 +113,48 @@ router.delete('/:id', auth, async (req, res) => {
   }
 })
 
-// POST photo — JWT protected. Uploads to Cloudinary, stores the reference.
+// POST photo — JWT protected. Checks the file contents, uploads it as a private Cloudinary asset.
 router.post('/:id/photos', auth, upload.single('photo'), async (req, res) => {
   try {
-    const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
+    const leadId = parseId(req.params.id)
+    const lead = leadId ? await prisma.lead.findUnique({ where: { id: leadId } }) : null
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
     if (!req.file) return res.status(400).json({ error: 'No valid file uploaded' })
 
-    const uploadResult = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: `kwe-crm/leads/${lead.id}`, resource_type: 'auto' },
-        (error, result) => (error ? reject(error) : resolve(result))
-      )
-      stream.end(req.file.buffer)
-    })
+    const format = photos.detectFileType(req.file.buffer)
+    if (!format) return res.status(400).json({ error: 'File must be a JPEG, PNG, WebP or PDF' })
 
-    const photo = await prisma.photo.create({
-      data: {
-        filename: req.file.originalname,
-        url: uploadResult.secure_url,
+    const count = await prisma.photo.count({ where: { leadId: lead.id } })
+    if (count >= photos.MAX_PHOTOS_PER_LEAD) {
+      return res.status(409).json({ error: `Photo limit reached (${photos.MAX_PHOTOS_PER_LEAD} per lead)` })
+    }
+
+    const uploadResult = await photos.uploadPrivate(req.file.buffer, `kwe-crm/leads/${lead.id}`)
+
+    let photo
+    try {
+      photo = await prisma.photo.create({
+        data: {
+          filename: photos.sanitiseFilename(req.file.originalname),
+          url: uploadResult.secure_url,
+          publicId: uploadResult.public_id,
+          resourceType: uploadResult.resource_type,
+          delivery: photos.PRIVATE_DELIVERY,
+          format,
+          leadId: lead.id
+        }
+      })
+    } catch (error) {
+      // Saving the row failed after the upload succeeded: don't leave the new file orphaned
+      await photos.removeFiles([{
         publicId: uploadResult.public_id,
         resourceType: uploadResult.resource_type,
-        leadId: lead.id
-      }
-    })
+        delivery: photos.PRIVATE_DELIVERY
+      }])
+      throw error
+    }
 
-    res.status(201).json(photo)
+    res.status(201).json(photos.presentPhoto(photo))
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Failed to upload photo' })
@@ -173,13 +164,17 @@ router.post('/:id/photos', auth, upload.single('photo'), async (req, res) => {
 // DELETE photo — JWT protected
 router.delete('/:id/photos/:photoId', auth, async (req, res) => {
   try {
-    const photo = await prisma.photo.findUnique({ where: { id: Number(req.params.photoId) } })
-    if (!photo || photo.leadId !== Number(req.params.id)) {
+    const leadId = parseId(req.params.id)
+    const photoId = parseId(req.params.photoId)
+    if (!leadId || !photoId) return res.status(404).json({ error: 'Photo not found' })
+
+    const photo = await prisma.photo.findUnique({ where: { id: photoId } })
+    if (!photo || photo.leadId !== leadId) {
       return res.status(404).json({ error: 'Photo not found' })
     }
 
-    await cloudinary.uploader.destroy(photo.publicId, { resource_type: photo.resourceType })
     await prisma.photo.delete({ where: { id: photo.id } })
+    await photos.removeFiles([photo])
 
     res.status(204).send()
   } catch (error) {
@@ -191,16 +186,15 @@ router.delete('/:id/photos/:photoId', auth, async (req, res) => {
 // POST activity note — JWT protected
 router.post('/:id/activity', auth, async (req, res) => {
   try {
-    const { message } = req.body
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: 'message is required' })
-    }
-
-    const lead = await prisma.lead.findUnique({ where: { id: Number(req.params.id) } })
+    const leadId = parseId(req.params.id)
+    const lead = leadId ? await prisma.lead.findUnique({ where: { id: leadId } }) : null
     if (!lead) return res.status(404).json({ error: 'Lead not found' })
 
+    const checked = validateActivityMessage(req.body?.message)
+    if (checked.error) return res.status(400).json({ error: checked.error })
+
     const entry = await prisma.activityLog.create({
-      data: { message: message.trim(), leadId: lead.id }
+      data: { message: checked.value, leadId: lead.id }
     })
 
     res.status(201).json(entry)
